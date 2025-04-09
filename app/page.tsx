@@ -34,10 +34,12 @@ import {
 import { ThemeSelector } from "@/components/theme-selector"
 import { PersonalInfo, Education, Experience, Skill, Project, ResumeData } from "@/hooks/use-resume"
 
-// Only import html2pdf.js in the browser
+// Only import html2pdf.js and jsPDF in the browser
 let html2pdf: any
+let jsPDF: any
 if (typeof window !== 'undefined') {
   html2pdf = require('html2pdf.js')
+  jsPDF = require('jspdf')
 }
 
 export default function ResumePage() {
@@ -230,126 +232,81 @@ export default function ResumePage() {
       return
     }
 
-    // Helper function to determine which elements to ignore
-    const ignoreElements = (element: HTMLElement): boolean => {
-      return element.classList.contains('ignore-pdf') ||
-             element.tagName.toLowerCase() === 'script' ||
-             element.tagName.toLowerCase() === 'style'
+    // Create a new jsPDF instance
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
+
+    // Set margins
+    const margins = {
+      top: 20,
+      bottom: 20,
+      left: 20,
+      right: 20,
+      width: 170
     }
 
-    // Helper function to handle elements before conversion
-    const before = (currentElement: HTMLElement, elementsOnPage: HTMLElement[]): boolean => {
-      // Prevent page breaks within paragraphs and headings
-      if (currentElement.tagName.toLowerCase() === 'p' || 
-          currentElement.tagName.toLowerCase() === 'h1' ||
-          currentElement.tagName.toLowerCase() === 'h2' ||
-          currentElement.tagName.toLowerCase() === 'h3') {
-        return true
-      }
-      
-      // Prevent page breaks within list items
-      if (currentElement.tagName.toLowerCase() === 'li') {
-        return true
-      }
-      
-      return false
-    }
+    // Helper function to split text into lines that fit within width
+    const splitText = (text: string, maxWidth: number): string[] => {
+      const words = text.split(' ')
+      const lines: string[] = []
+      let currentLine = ''
 
-    // Helper function to handle elements after conversion
-    const after = (currentElement: HTMLElement, elementsOnPage: HTMLElement[]): boolean => {
-      // Prevent page breaks within sections
-      if (currentElement.classList.contains('section')) {
-        return true
-      }
-      
-      // Prevent page breaks within items
-      if (currentElement.classList.contains('item')) {
-        return true
-      }
-      
-      return false
-    }
+      words.forEach(word => {
+        const testLine = currentLine + word + ' '
+        const testWidth = doc.getStringUnitWidth(testLine) * doc.internal.getFontSize()
 
-    // Add page break handling style
-    const style = document.createElement('style')
-    style.textContent = `
-      .page-break {
-        page-break-after: always;
-      }
-      
-      /* Prevent word splitting across pages */
-      p, span, a {
-        word-break: keep-all;
-        hyphens: none;
-        white-space: pre-wrap;
-      }
-      
-      /* Prevent splitting of inline elements */
-      .item-title, .item-subtitle, .item-date {
-        display: inline-block;
-        white-space: nowrap;
-      }
-      
-      /* Prevent splitting of skill items */
-      .skill-item {
-        display: inline-block;
-        white-space: nowrap;
-      }
-    `;
-    previewRef.current.appendChild(style)
-
-    const options = {
-      margin: 1,
-      filename: `resume-${new Date().toISOString().slice(0, 10)}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { 
-        scale: 2,
-        logging: false,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: '#ffffff',
-        letterRendering: 1,
-        ignoreElements: (element: HTMLElement) => {
-          // Prevent page breaks within words
-          if (element.tagName === 'SPAN' || element.tagName === 'A') {
-            return false
-          }
-          return ignoreElements(element)
+        if (testWidth > maxWidth) {
+          lines.push(currentLine.trim())
+          currentLine = word + ' '
+        } else {
+          currentLine = testLine
         }
-      },
-      jsPDF: { 
-        unit: 'in', 
-        format: 'letter', 
-        orientation: 'portrait',
-        compress: true,
-        putOnlyUsedFonts: true,
-        pageBreak: {
-          mode: 'avoid-all',
-          before: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
-            return before(currentElement, elementsOnPage)
-          },
-          after: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
-            return after(currentElement, elementsOnPage)
-          }
-        }
-      },
-      onclone: (doc: Document) => {
-        const elements = doc.querySelectorAll('*')
-        elements.forEach((element) => {
-          if (ignoreElements(element as HTMLElement)) {
-            (element as HTMLElement).style.display = 'none'
-          }
-        })
-      },
-      before: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
-        return before(currentElement, elementsOnPage)
-      },
-      after: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
-        return after(currentElement, elementsOnPage)
-      },
+      })
+
+      if (currentLine.trim()) {
+        lines.push(currentLine.trim())
+      }
+
+      return lines
     }
 
-    html2pdf().set(options).from(previewRef.current).save()
+    // Get all text content from the resume
+    const textContent = Array.from(previewRef.current.querySelectorAll('p, h1, h2, h3, li, span'))
+      .map(el => el.textContent)
+      .filter(text => text && text.trim())
+      .join(' ')
+
+    // Split the entire content into lines that fit the page
+    const lines = splitText(textContent, margins.width)
+
+    // Set initial position
+    let y = margins.top
+    const lineHeight = 10
+
+    // Add content to PDF
+    lines.forEach(line => {
+      // Check if we need a new page
+      if (y + lineHeight > doc.internal.pageSize.height - margins.bottom) {
+        doc.addPage()
+        y = margins.top
+      }
+
+      // Add the line to the PDF
+      doc.text(line, margins.left, y)
+      y += lineHeight
+    })
+
+    // Save the PDF
+    const date = new Date().toISOString().slice(0, 10)
+    doc.save(`resume-${date}.pdf`)
+
+    toast({
+      title: "PDF Exported",
+      description: "Your resume has been exported to PDF.",
+    })
   }
 
   if (!isMounted) {
