@@ -34,12 +34,10 @@ import {
 import { ThemeSelector } from "@/components/theme-selector"
 import { PersonalInfo, Education, Experience, Skill, Project, ResumeData } from "@/hooks/use-resume"
 
-// Only import html2pdf.js and jsPDF in the browser
+// Only import html2pdf.js in the browser
 let html2pdf: any
-let jsPDF: any
 if (typeof window !== 'undefined') {
   html2pdf = require('html2pdf.js')
-  jsPDF = require('jspdf')
 }
 
 export default function ResumePage() {
@@ -221,9 +219,16 @@ export default function ResumePage() {
   }
 
   const exportToPDF = () => {
-    if (!previewRef.current) return
+    if (!previewRef.current) {
+      toast({
+        title: "Error",
+        description: "No preview available to export",
+        variant: "destructive",
+      })
+      return
+    }
 
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !html2pdf) {
       toast({
         title: "Error",
         description: "PDF export is not available during server-side rendering.",
@@ -232,81 +237,43 @@ export default function ResumePage() {
       return
     }
 
-    // Create a new jsPDF instance
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    })
-
-    // Set margins
-    const margins = {
-      top: 20,
-      bottom: 20,
-      left: 20,
-      right: 20,
-      width: 170
-    }
-
-    // Helper function to split text into lines that fit within width
-    const splitText = (text: string, maxWidth: number): string[] => {
-      const words = text.split(' ')
-      const lines: string[] = []
-      let currentLine = ''
-
-      words.forEach(word => {
-        const testLine = currentLine + word + ' '
-        const testWidth = doc.getStringUnitWidth(testLine) * doc.internal.getFontSize()
-
-        if (testWidth > maxWidth) {
-          lines.push(currentLine.trim())
-          currentLine = word + ' '
-        } else {
-          currentLine = testLine
+    try {
+      const options = {
+        margin: 10,
+        filename: `resume-${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: '#ffffff',
+          letterRendering: 1,
+          ignoreElements: (element: HTMLElement) => {
+            return element.classList.contains('ignore-pdf')
+          }
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait'
         }
+      }
+
+      html2pdf().set(options).from(previewRef.current).save()
+      
+      toast({
+        title: "PDF Exported",
+        description: "Your resume has been exported to PDF.",
       })
-
-      if (currentLine.trim()) {
-        lines.push(currentLine.trim())
-      }
-
-      return lines
+    } catch (error) {
+      console.error('Error exporting PDF:', error)
+      toast({
+        title: "Error",
+        description: "Failed to export PDF. Please try again.",
+        variant: "destructive",
+      })
     }
-
-    // Get all text content from the resume
-    const textContent = Array.from(previewRef.current.querySelectorAll('p, h1, h2, h3, li, span'))
-      .map(el => el.textContent)
-      .filter(text => text && text.trim())
-      .join(' ')
-
-    // Split the entire content into lines that fit the page
-    const lines = splitText(textContent, margins.width)
-
-    // Set initial position
-    let y = margins.top
-    const lineHeight = 10
-
-    // Add content to PDF
-    lines.forEach(line => {
-      // Check if we need a new page
-      if (y + lineHeight > doc.internal.pageSize.height - margins.bottom) {
-        doc.addPage()
-        y = margins.top
-      }
-
-      // Add the line to the PDF
-      doc.text(line, margins.left, y)
-      y += lineHeight
-    })
-
-    // Save the PDF
-    const date = new Date().toISOString().slice(0, 10)
-    doc.save(`resume-${date}.pdf`)
-
-    toast({
-      title: "PDF Exported",
-      description: "Your resume has been exported to PDF.",
-    })
   }
 
   if (!isMounted) {
