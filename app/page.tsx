@@ -230,6 +230,23 @@ export default function ResumePage() {
       return
     }
 
+    // Helper function to determine which elements to ignore
+    const ignoreElements = (element: HTMLElement): boolean => {
+      return element.classList.contains('ignore-pdf') ||
+             element.tagName.toLowerCase() === 'script' ||
+             element.tagName.toLowerCase() === 'style'
+    }
+
+    // Helper function to handle elements before conversion
+    const before = (currentElement: HTMLElement, elementsOnPage: HTMLElement[]): boolean => {
+      return currentElement.classList.contains('break-before')
+    }
+
+    // Helper function to handle elements after conversion
+    const after = (currentElement: HTMLElement, elementsOnPage: HTMLElement[]): boolean => {
+      return currentElement.classList.contains('break-after')
+    }
+
     const options = {
       margin: 1,
       filename: `resume-${new Date().toISOString().slice(0, 10)}.pdf`,
@@ -240,7 +257,7 @@ export default function ResumePage() {
         const elements = doc.querySelectorAll('*')
         elements.forEach((element) => {
           if (ignoreElements(element as HTMLElement)) {
-            element.style.display = 'none'
+            (element as HTMLElement).style.display = 'none'
           }
         })
       },
