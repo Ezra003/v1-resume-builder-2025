@@ -239,20 +239,100 @@ export default function ResumePage() {
 
     // Helper function to handle elements before conversion
     const before = (currentElement: HTMLElement, elementsOnPage: HTMLElement[]): boolean => {
-      return currentElement.classList.contains('break-before')
+      // Prevent page breaks within paragraphs and headings
+      if (currentElement.tagName.toLowerCase() === 'p' || 
+          currentElement.tagName.toLowerCase() === 'h1' ||
+          currentElement.tagName.toLowerCase() === 'h2' ||
+          currentElement.tagName.toLowerCase() === 'h3') {
+        return true
+      }
+      
+      // Prevent page breaks within list items
+      if (currentElement.tagName.toLowerCase() === 'li') {
+        return true
+      }
+      
+      return false
     }
 
     // Helper function to handle elements after conversion
     const after = (currentElement: HTMLElement, elementsOnPage: HTMLElement[]): boolean => {
-      return currentElement.classList.contains('break-after')
+      // Prevent page breaks within sections
+      if (currentElement.classList.contains('section')) {
+        return true
+      }
+      
+      // Prevent page breaks within items
+      if (currentElement.classList.contains('item')) {
+        return true
+      }
+      
+      return false
     }
+
+    // Add page break handling style
+    const style = document.createElement('style')
+    style.textContent = `
+      .page-break {
+        page-break-after: always;
+      }
+      
+      /* Prevent word splitting across pages */
+      p, span, a {
+        word-break: keep-all;
+        hyphens: none;
+        white-space: pre-wrap;
+      }
+      
+      /* Prevent splitting of inline elements */
+      .item-title, .item-subtitle, .item-date {
+        display: inline-block;
+        white-space: nowrap;
+      }
+      
+      /* Prevent splitting of skill items */
+      .skill-item {
+        display: inline-block;
+        white-space: nowrap;
+      }
+    `;
+    previewRef.current.appendChild(style)
 
     const options = {
       margin: 1,
       filename: `resume-${new Date().toISOString().slice(0, 10)}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+      html2canvas: { 
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        letterRendering: 1,
+        ignoreElements: (element: HTMLElement) => {
+          // Prevent page breaks within words
+          if (element.tagName === 'SPAN' || element.tagName === 'A') {
+            return false
+          }
+          return ignoreElements(element)
+        }
+      },
+      jsPDF: { 
+        unit: 'in', 
+        format: 'letter', 
+        orientation: 'portrait',
+        compress: true,
+        putOnlyUsedFonts: true,
+        pageBreak: {
+          mode: 'avoid-all',
+          before: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
+            return before(currentElement, elementsOnPage)
+          },
+          after: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
+            return after(currentElement, elementsOnPage)
+          }
+        }
+      },
       onclone: (doc: Document) => {
         const elements = doc.querySelectorAll('*')
         elements.forEach((element) => {
