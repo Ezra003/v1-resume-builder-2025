@@ -32,8 +32,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeSelector } from "@/components/theme-selector"
-import html2pdf from "html2pdf.js"
 import { PersonalInfo, Education, Experience, Skill, Project, ResumeData } from "@/hooks/use-resume"
+
+// Only import html2pdf.js in the browser
+let html2pdf: any
+if (typeof window !== 'undefined') {
+  html2pdf = require('html2pdf.js')
+}
 
 export default function ResumePage() {
   const { resumeData, setResumeData, resetResume } = useResume()
@@ -214,320 +219,40 @@ export default function ResumePage() {
   }
 
   const exportToPDF = () => {
-    if (!previewRef.current) {
-      toast({
-        title: "Error",
-        description: "No preview available to export",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!previewRef.current) return
 
-    // Ensure we're running on the client side
     if (typeof window === 'undefined') {
       toast({
         title: "Error",
-        description: "PDF export is only available in the browser",
+        description: "PDF export is not available during server-side rendering.",
         variant: "destructive",
       })
       return
     }
 
-    try {
-      const element = previewRef.current
-      const options = {
-        margin: [25, 25, 25, 25], // Left, Top, Right, Bottom
-        filename: `${resumeData.personalInfo.name || 'resume'}.pdf`,
-        image: { type: 'jpeg', quality: 1.0 },
-        html2canvas: { 
-          scale: 2,
-          logging: false,
-          useCORS: true,
-          allowTaint: false,
-          onclone: function(doc: Document) {
-            // Ensure the profile picture is properly loaded
-            const profileImg = doc.querySelector('.profile-picture') as HTMLImageElement
-            if (profileImg && profileImg.src) {
-              const img = new Image()
-              img.src = profileImg.src
-              img.onload = () => {
-                profileImg.src = img.src
-              }
-            }
-          },
-          backgroundColor: '#ffffff',
-          letterRendering: 1,
-          ignoreElements: (element: HTMLElement) => {
-            // Prevent page breaks within words
-            if (element.tagName === 'SPAN' || element.tagName === 'A') {
-              return false
-            }
-            return false
+    const options = {
+      margin: 1,
+      filename: `resume-${new Date().toISOString().slice(0, 10)}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+      onclone: (doc: Document) => {
+        const elements = doc.querySelectorAll('*')
+        elements.forEach((element) => {
+          if (ignoreElements(element as HTMLElement)) {
+            element.style.display = 'none'
           }
-        },
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
-          orientation: 'portrait',
-          compress: true,
-          putOnlyUsedFonts: true,
-          pageBreak: {
-            mode: 'avoid-all',
-            before: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
-              // Prevent page breaks within paragraphs
-              if (currentElement.tagName === 'P') {
-                return false
-              }
-              return false
-            },
-            after: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
-              // Prevent page breaks within items
-              if (currentElement.classList.contains('item')) {
-                return false
-              }
-              return false
-            }
-          }
-        }
-      }
-
-      // Create a temporary container to clone the resume
-      const tempContainer = document.createElement('div')
-      tempContainer.innerHTML = element.innerHTML
-      
-      // Add print-specific styles
-      const style = document.createElement('style')
-      style.textContent = `
-        body {
-          font-family: Arial, sans-serif;
-          color: #333;
-          line-height: 1.6;
-          width: 100%;
-          padding: 20mm;
-          box-sizing: border-box;
-        }
-        
-        .profile-picture {
-          width: 100px;
-          height: 100px;
-          border-radius: 50%;
-          margin-right: 20px;
-        }
-        
-        .header {
-          display: flex;
-          align-items: center;
-          margin-bottom: 20mm;
-        }
-        
-        .contact-info {
-          margin-top: 10mm;
-          font-size: 12pt;
-          color: #666;
-        }
-        
-        .section {
-          margin-bottom: 15mm;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          page-break-after: avoid;
-          break-after: avoid;
-        }
-        
-        .section-title {
-          font-size: 14pt;
-          font-weight: bold;
-          color: #0070f3;
-          margin-bottom: 5mm;
-          border-bottom: 2px solid #0070f3;
-          padding-bottom: 2mm;
-          page-break-after: avoid;
-          break-after: avoid;
-        }
-        
-        .item {
-          margin-bottom: 10mm;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          page-break-after: avoid;
-          break-after: avoid;
-        }
-        
-        .item-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 5mm;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        .item-title {
-          font-weight: bold;
-          font-size: 12pt;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        .item-subtitle {
-          color: #666;
-          font-size: 11pt;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        .item-date {
-          color: #666;
-          font-size: 11pt;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        .item-description {
-          font-size: 11pt;
-          color: #333;
-          margin-top: 5mm;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          word-break: keep-all;
-          hyphens: none;
-          white-space: pre-wrap;
-        }
-        
-        .item-description p {
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          word-break: keep-all;
-          hyphens: none;
-          white-space: pre-wrap;
-        }
-        
-        .item-description a {
-          color: #0070f3;
-          text-decoration: underline;
-          word-break: break-all;
-          display: inline-block;
-          margin-top: 5mm;
-          font-size: 11pt;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        .skills-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 5mm;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        .skill-item {
-          background: #f0f0f0;
-          padding: 4px 8px;
-          border-radius: 20px;
-          font-size: 11pt;
-          color: #333;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        @page {
-          margin: 25mm;
-          size: A4;
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        /* Prevent word splitting across pages */
-        p {
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          word-break: keep-all;
-          hyphens: none;
-          white-space: pre-wrap;
-        }
-        
-        /* Prevent section breaks across pages */
-        .section {
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          page-break-after: avoid;
-          break-after: avoid;
-        }
-        
-        /* Prevent list items from breaking across pages */
-        ul, ol {
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        li {
-          page-break-inside: avoid;
-          break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-        }
-        
-        /* Additional WebKit-specific rules */
-        * {
-          -webkit-column-break-inside: avoid;
-          -webkit-column-break-after: avoid;
-          -webkit-column-break-before: avoid;
-        }
-        
-        /* Prevent splitting of inline elements */
-        span, a {
-          display: inline-block;
-          white-space: nowrap;
-        }
-      `
-      tempContainer.appendChild(style)
-      
-      // Wait for images to load
-      const images = tempContainer.getElementsByTagName('img')
-      const promises = Array.from(images).map(img => new Promise(resolve => {
-        if (img.complete) resolve(null)
-        else img.onload = resolve
-      }))
-
-      Promise.all(promises).then(() => {
-        // @ts-ignore
-        html2pdf().set(options).from(tempContainer).save()
-        
-        toast({
-          title: "PDF Exported",
-          description: "Your resume has been exported to PDF.",
         })
-      }).catch(error => {
-        console.error('Error loading images:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load images. PDF may be incomplete.",
-          variant: "destructive",
-        })
-      })
-    } catch (error) {
-      console.error('Error exporting PDF:', error)
-      toast({
-        title: "Error",
-        description: "Failed to export PDF. Please try again.",
-        variant: "destructive",
-      })
+      },
+      before: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
+        return before(currentElement, elementsOnPage)
+      },
+      after: (currentElement: HTMLElement, elementsOnPage: HTMLElement[]) => {
+        return after(currentElement, elementsOnPage)
+      },
     }
+
+    html2pdf().set(options).from(previewRef.current).save()
   }
 
   if (!isMounted) {
